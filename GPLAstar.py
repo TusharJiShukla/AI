@@ -32,7 +32,7 @@ class GPLAstar(labels):
 
         self.upper_bound = upper_bound
         self.heuristics = lower_bound
-        self.heuristic_type = heuristic_type  # 'original' or 'custom'
+        self.heuristic_type = heuristic_type  # 'original' or 'custom' or 'topk'
 
         self.expanded_labels = 0
         self.run_time_limit = run_time_limit
@@ -53,6 +53,16 @@ class GPLAstar(labels):
         self.custom_heuristic_calls = 0
         self.original_heuristic_calls = 0
 
+        #Top-k heuristic support & caches
+        self.topk_k = 2
+        try:
+            self.dist_c, self.pred_c = nx.single_source_dijkstra(self.Graph, self.GV_goal[0], weight='unimpeded_cost')
+        except Exception:
+            self.dist_c = self.heuristics if self.heuristics is not None else {}
+            self.pred_c = {}
+        self.dist_s_all = {}
+        self.heuristic_cache = {}
+        
         self.algorithm()
     
     def compute_custom_heuristic(self, gv_pos, repaired_edges):
@@ -83,16 +93,110 @@ class GPLAstar(labels):
         self.heuristic_computation_time += (time.time() - start_time)
         return heuristic_value
 
-    def heuristic(self, node, repaired_edges=None):
-        """Unified heuristic function that supports both types"""
-        self.original_heuristic_calls += 1
-        
-        if self.heuristics is None:
-            return 0
-        elif self.heuristic_type == 'custom' and repaired_edges is not None:
-            return self.compute_custom_heuristic(node, repaired_edges)
+    def compute_custom_topk(self, gv_pos, sv_pos, repaired_edges, k=None):
+        """Top-k predictive heuristic (fast) - robust path reconstruction using nx.shortest_path."""
+        start_time = time.time()
+        self.custom_heuristic_calls += 1
+
+        if k is None:
+            k = self.topk_k
+
+        # canonicalize repaired edges set (ensure tuples)
+        try:
+            repaired_fset = frozenset(tuple(sorted(e)) for e in repaired_edges)
+        except Exception:
+            # if repaired_edges is not iterable or contains unexpected items, make empty set
+            repaired_fset = frozenset()
+
+        cache_key = (gv_pos, sv_pos, repaired_fset, k)
+        if cache_key in self.heuristic_cache:
+            return self.heuristic_cache[cache_key]
+
+        # baseline unimpeded distance
+        base = self.dist_c.get(gv_pos, float('inf'))
+        if base == float('inf'):
+            # if unreachable in unimpeded graph, fallback to original baseline if available
+            h_val = self.heuristics.get(gv_pos, float('inf')) if self.heuristics is not None else float('inf')
+            self.heuristic_cache[cache_key] = h_val
+            self.heuristic_computation_time += (time.time() - start_time)
+            return h_val
+
+        # reconstruct unimpeded path nodes using NetworkX (robust)
+        try:
+            path_nodes = nx.shortest_path(self.Graph, source=gv_pos, target=self.GV_goal[0], weight='unimpeded_cost')
+        except nx.NetworkXNoPath:
+            path_nodes = []
+
+        # convert consecutive node pairs to edge tuples (sorted ordering)
+        path_edges = []
+        for idx in range(len(path_nodes) - 1):
+            u = path_nodes[idx]
+            v = path_nodes[idx + 1]
+            edge = (u, v) if u < v else (v, u)
+            path_edges.append(edge)
+
+        # collect up to k unrepaired impeded edges on that path
+        unrepaired_impeded = []
+        for e in path_edges:
+            if e in self.impeded_edges and e not in repaired_fset:
+                unrepaired_impeded.append(e)
+                if len(unrepaired_impeded) >= k:
+                    break
+
+        if not unrepaired_impeded:
+            h_val = base
+            self.heuristic_cache[cache_key] = h_val
+            self.heuristic_computation_time += (time.time() - start_time)
+            return h_val
+
+        # compute total optimistic saving (sum of Ti - Tu for those edges)
+        total_saving = 0
+        start_nodes = []
+        for e in unrepaired_impeded:
+            # ensure edge exists in Graph with named attributes
+            total_saving += (self.Graph.edges[e]['impeded_cost'] - self.Graph.edges[e]['unimpeded_cost'])
+            # choose as service target the node earlier on the path (path_nodes[idx])
+            # we use the u endpoint (i.e., the node the convoy reaches first)
+            start_nodes.append(e[0])
+
+        # lazy compute service distances from sv_pos (and cache)
+        if sv_pos not in self.dist_s_all:
+            self.dist_s_all[sv_pos] = nx.single_source_dijkstra_path_length(self.Graph, sv_pos, weight='SV_cost')
+        dist_map = self.dist_s_all[sv_pos]
+
+        # optimistic service travel = minimum distance to any of start_nodes (admissible)
+        service_travel = min(dist_map.get(u, float('inf')) for u in start_nodes)
+
+        # predictive heuristic
+        h_predictive = base - total_saving + service_travel
+        if h_predictive < 0:
+            h_predictive = 0
+
+        self.heuristic_cache[cache_key] = h_predictive
+        self.heuristic_computation_time += (time.time() - start_time)
+        return h_predictive
+
+
+    def heuristic(self, node, repaired_edges=None, sv_pos=None):
+        """Unified heuristic function that supports original, custom (full graph), and topk variants."""
+        if self.heuristic_type == 'custom':
+            if repaired_edges is None:
+                self.original_heuristic_calls += 1
+                return self.heuristics.get(node, 0) if self.heuristics is not None else 0
+            else:
+                return self.compute_custom_heuristic(node, repaired_edges)
+
+        elif self.heuristic_type == 'topk':
+            if repaired_edges is None or sv_pos is None:
+                self.original_heuristic_calls += 1
+                return self.heuristics.get(node, 0) if self.heuristics is not None else 0
+            else:
+                h_predictive = self.compute_custom_topk(node, sv_pos, repaired_edges, k=self.topk_k)
+                self.original_heuristic_calls += 1
+                return max(self.heuristics.get(node, 0) if self.heuristics is not None else 0, h_predictive)
         else:
-            return self.heuristics[node]
+            self.original_heuristic_calls += 1
+            return self.heuristics.get(node, 0) if self.heuristics is not None else 0
 
     def algorithm(self):
         '''Initialize lable dict'''
@@ -101,10 +205,11 @@ class GPLAstar(labels):
         sv_start_time = [0]*len(self.SV_start)
         start_label = labels(self.GV_start[0],self.SV_start[0],gv_start_time[0],sv_start_time[0],{},0,None)
         
-        self.labels_dict[tuple(self.GV_start+self.SV_start)] = [start_label]
+        self.labels_dict[(self.GV_start[0], self.SV_start[0])] = [start_label]
         
         # Use appropriate heuristic for start label
-        start_heuristic = self.heuristic(self.GV_start[0], start_label.V.keys())
+        start_heuristic = self.heuristic(self.GV_start[0], start_label.V.keys(), sv_pos=self.SV_start[0])
+
         self.labels_heap.put(start_label, start_label.cost + start_heuristic, start_label.cost)      
 
         start_time = time.time()
@@ -224,7 +329,7 @@ class GPLAstar(labels):
 
                         wait_time = max(0,visit_time-curr_label.gv_time)
                          # GV picks the lower of visited or unvisited costs
-                        gv_edge_cost = min( self.Graph.edges[gv_edge]['impeded_cost'], self.Graph.edges[gv_edge]['unimpeded_cost'] + wait_time)
+                        gv_edge_cost = min( self.Graph.edges[gv_edge]['impeded_cost'], wait_time + self.Graph.edges[gv_edge]['unimpeded_cost'])
                         gv_time += gv_edge_cost
                         cost = gv_time + sv_time
 
@@ -244,7 +349,7 @@ class GPLAstar(labels):
 
                 else:
                     if curr_label.gv_wait is False:
-                        gv_time += self.Graph.edges[gv_edge]['impeded_cost']
+                        gv_time += self.Graph.edges[gv_edge]['unimpeded_cost']
                         cost = gv_time + sv_time
                         new_labels.append(labels(gv_next,sv_next,gv_time,sv_time,V_,cost,curr_label,sv_next==sv_curr))
 
@@ -263,6 +368,8 @@ class GPLAstar(labels):
             # Use appropriate heuristic based on type
             if self.heuristic_type == 'custom':
                 h_value = self.heuristic(label.gv_pos, label.V.keys())
+            elif self.heuristic_type == 'topk':
+                h_value = self.heuristic(label.gv_pos, label.V.keys(), sv_pos=label.sv_pos)
             else:
                 h_value = self.heuristic(label.gv_pos)
                 

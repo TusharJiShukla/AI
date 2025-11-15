@@ -13,6 +13,7 @@ from graph import graph
 
 def main():
     planner()
+    
 
 class planner():
     def __init__(self):
@@ -34,6 +35,7 @@ class planner():
         print('SV_start',self.SV_start)
         print('Impeded_edges', len(self.impeded_edges), self.impeded_edges)
 
+        # precompute one-time bounds using Dijkstra (paper baseline)
         self.upper_bound = nx.shortest_path_length(self.Graph, source=self.GV_goal[0], target=None, weight='impeded_cost', method='dijkstra')
         self.lower_bound = nx.shortest_path_length(self.Graph, source=self.GV_goal[0], target=None, weight='unimpeded_cost', method='dijkstra')
 
@@ -42,6 +44,7 @@ class planner():
         print('upper bound', self.upper_bound[self.GV_start[0]])
         print('lower bound', self.lower_bound[self.GV_start[0]])
 
+        # precompute parents for UB rollout path (used by simulation rollouts)
         upper_bound_search = BestFirstSearch(self.Graph,self.GV_goal[0])
         self.UB_parents, _ = upper_bound_search.use_algorithm()
 
@@ -61,7 +64,7 @@ class planner():
         print('Vehicle Trajectory (gv_pos, sv_pos, gv_time, sv_time)',GPLAsim_original.Final_path)
         print('Run Time ', GPLAsim_time_original,  'Cost ', GPLAsim_cost_original)
 
-        # Run with custom heuristic
+        # Run with custom heuristic (full-graph per-label heuristic implemented by your friend)
         print('\n' + '='*60)
         print('############ Starting GPLAstar with CUSTOM heuristic ############# ')
         print('='*60)
@@ -74,31 +77,53 @@ class planner():
         print('Vehicle Trajectory (gv_pos, sv_pos, gv_time, sv_time)',GPLAsim_custom.Final_path)
         print('Run Time ', GPLAsim_time_custom,  'Cost ', GPLAsim_cost_custom)
 
-        # Comparison Results
-        print('\n' + '='*80)
-        print('####################### COMPARISON RESULTS #######################')
-        print('='*80)
-        print(f"{'Metric':<25} {'Original Heuristic':<20} {'Custom Heuristic':<20} {'Difference':<15}")
-        print(f"{'-'*25:<25} {'-'*20:<20} {'-'*20:<20} {'-'*15:<15}")
-        print(f"{'Final Cost':<25} {GPLAsim_cost_original:<20} {GPLAsim_cost_custom:<20} {GPLAsim_cost_custom - GPLAsim_cost_original:<15.2f}")
-        print(f"{'Run Time (s)':<25} {GPLAsim_time_original:<20.2f} {GPLAsim_time_custom:<20.2f} {GPLAsim_time_custom - GPLAsim_time_original:<15.2f}")
-        print(f"{'Expanded Labels':<25} {GPLAsim_original.expanded_labels:<20} {GPLAsim_custom.expanded_labels:<20} {GPLAsim_custom.expanded_labels - GPLAsim_original.expanded_labels:<15}")
-        print(f"{'Heuristic Calls':<25} {GPLAsim_original.original_heuristic_calls:<20} {GPLAsim_custom.custom_heuristic_calls:<20} {'N/A':<15}")
-        
-        # Determine which heuristic performed better
-        if GPLAsim_cost_custom < GPLAsim_cost_original:
-            print("\n🎉 CUSTOM HEURISTIC PERFORMED BETTER - Found lower cost solution!")
-        elif GPLAsim_cost_custom == GPLAsim_cost_original:
-            print("\n⚖️ BOTH HEURISTICS FOUND SAME COST SOLUTION")
-        else:
-            print("\n📊 ORIGINAL HEURISTIC FOUND BETTER SOLUTION")
-            
-        if GPLAsim_time_custom < GPLAsim_time_original:
-            print("🚀 CUSTOM HEURISTIC WAS FASTER")
-        else:
-            print("⏰ ORIGINAL HEURISTIC WAS FASTER")
+        # Run with Top-k predictive heuristic (your addition) — does NOT replace friend's code; it's an extra run.
+        print('\n' + '='*60)
+        print('############ Starting GPLAstar with TOP-K predictive heuristic ############# ')
+        print('='*60)
+        starttime = time.time()
+        # default k is inside GPLAstar (self.topk_k); you can change it externally if you want:
+        GPLAsim_topk = GPLAstar(self.Graph,self.GV_start,self.GV_goal,self.SV_start,self.impeded_edges,
+                                self.upper_bound, self.UB_parents, self.lower_bound, time_limit, heuristic_type='topk')
+        GPLAsim_cost_topk = GPLAsim_topk.UB_cost 
+        GPLAsim_time_topk = time.time()-starttime 
 
-        print('\n' + '='*80)
+        print('Vehicle Trajectory (gv_pos, sv_pos, gv_time, sv_time)',GPLAsim_topk.Final_path)
+        print('Run Time ', GPLAsim_time_topk,  'Cost ', GPLAsim_cost_topk)
+
+        # Comparison Results
+        print('\n' + '='*100)
+        print('####################### COMPARISON RESULTS #######################')
+        print('='*100)
+        print(f"{'Metric':<25} {'Original Heuristic':<20} {'Custom Heuristic':<20} {'Top-K Heuristic':<20} {'Diff (TopK - Orig)':<15}")
+        print(f"{'-'*25:<25} {'-'*20:<20} {'-'*20:<20} {'-'*20:<20} {'-'*15:<15}")
+        print(f"{'Final Cost':<25} {GPLAsim_cost_original:<20} {GPLAsim_cost_custom:<20} {GPLAsim_cost_topk:<20} {GPLAsim_cost_topk - GPLAsim_cost_original:<15.2f}")
+        print(f"{'Run Time (s)':<25} {GPLAsim_time_original:<20.2f} {GPLAsim_time_custom:<20.2f} {GPLAsim_time_topk:<20.2f} {GPLAsim_time_topk - GPLAsim_time_original:<15.2f}")
+        print(f"{'Expanded Labels':<25} {GPLAsim_original.expanded_labels:<20} {GPLAsim_custom.expanded_labels:<20} {GPLAsim_topk.expanded_labels:<20} {GPLAsim_topk.expanded_labels - GPLAsim_original.expanded_labels:<15}")
+        # Heuristic call counts: original uses original_heuristic_calls, custom uses custom_heuristic_calls, topk uses custom_heuristic_calls as well (shared counter in class)
+        print(f"{'Heuristic Calls (orig/custom/topk)':<25} {GPLAsim_original.original_heuristic_calls:<6} / {GPLAsim_original.custom_heuristic_calls:<6} {GPLAsim_custom.original_heuristic_calls:<6} / {GPLAsim_custom.custom_heuristic_calls:<6} {GPLAsim_topk.original_heuristic_calls:<6} / {GPLAsim_topk.custom_heuristic_calls:<6}")
+
+        # Determine which heuristic performed best by cost
+        best_cost = min(GPLAsim_cost_original, GPLAsim_cost_custom, GPLAsim_cost_topk)
+        print()
+        if best_cost == GPLAsim_cost_topk:
+            print("🎉 TOP-K HEURISTIC PERFORMED BEST - Found lowest cost solution!")
+        elif best_cost == GPLAsim_cost_custom:
+            print("🎉 CUSTOM HEURISTIC PERFORMED BEST - Found lowest cost solution!")
+        elif best_cost == GPLAsim_cost_original:
+            print("🎉 ORIGINAL HEURISTIC PERFORMED BEST - Found lowest cost solution!")
+
+        # Which was faster (wall clock)
+        best_time = min(GPLAsim_time_original, GPLAsim_time_custom, GPLAsim_time_topk)
+        if best_time == GPLAsim_time_topk:
+            print("🚀 TOP-K HEURISTIC WAS FASTEST")
+        elif best_time == GPLAsim_time_custom:
+            print("🚀 CUSTOM HEURISTIC WAS FASTEST")
+        else:
+            print("🚀 ORIGINAL HEURISTIC WAS FASTEST")
+
+        print('\n' + '='*100)
+        
 
         print('############ Starting Centralized A* algo ############# ')
         starttime = time.time()
