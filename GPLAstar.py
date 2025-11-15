@@ -32,7 +32,7 @@ class GPLAstar(labels):
 
         self.upper_bound = upper_bound
         self.heuristics = lower_bound
-        self.heuristic_type = heuristic_type  # 'original' or 'custom' or 'topk'
+        self.heuristic_type = heuristic_type  # 'original' or 'topk' or 'custom'
 
         self.expanded_labels = 0
         self.run_time_limit = run_time_limit
@@ -50,8 +50,8 @@ class GPLAstar(labels):
         
         # Statistics for comparison
         self.heuristic_computation_time = 0
-        self.custom_heuristic_calls = 0
         self.original_heuristic_calls = 0
+        self.custom_heuristic_calls = 0
 
         #Top-k heuristic support & caches
         self.topk_k = 2
@@ -64,39 +64,61 @@ class GPLAstar(labels):
         self.heuristic_cache = {}
         
         self.algorithm()
-    
+
     def compute_custom_heuristic(self, gv_pos, repaired_edges):
-        """Compute realistic heuristic considering which edges are repaired"""
+        """
+        ADMISSIBLE CUSTOM HEURISTIC - Always optimistic but more informed
+        Uses minimum possible cost considering which edges MIGHT be repaired
+        """
         start_time = time.time()
         self.custom_heuristic_calls += 1
         
-        # Create a temporary graph with updated edge costs
-        temp_graph = self.Graph.copy()
-        
-        for edge in temp_graph.edges():
-            edge_key = tuple(sorted(edge))
-            if edge_key in repaired_edges:
-                # Edge is repaired - use unimpeded cost
-                temp_graph.edges[edge]['temp_cost'] = temp_graph.edges[edge]['unimpeded_cost']
-            else:
-                # Edge is not repaired - use impeded cost  
-                temp_graph.edges[edge]['temp_cost'] = temp_graph.edges[edge]['impeded_cost']
-        
         try:
-            # Compute shortest path with realistic costs
-            heuristic_value = nx.shortest_path_length(temp_graph, source=gv_pos, 
-                                                    target=self.GV_goal[0], weight='temp_cost')
-        except nx.NetworkXNoPath:
+            # ✅ ADMISSIBLE APPROACH: Always use the most optimistic cost
+            # For repaired edges, use unimpeded cost (best case)
+            # For unrepaired edges, use the minimum of impeded vs potential repair cost
+            
+            def optimistic_cost(u, v, edge_data):
+                edge_key = tuple(sorted((u, v)))
+                
+                # If already repaired, best case is unimpeded cost
+                if edge_key in repaired_edges:
+                    return edge_data['unimpeded_cost']
+                
+                # If not repaired yet, consider two possibilities:
+                # 1. GV goes through impeded (impeded_cost)
+                # 2. SV repairs it first (unimpeded_cost + some service travel)
+                # We take the minimum for admissibility
+                impeded = edge_data['impeded_cost']
+                unimpeded = edge_data['unimpeded_cost']
+                
+                # Most optimistic: assume repair happens instantly at no extra cost
+                # But to be safe, we can add a small penalty to ensure admissibility
+                return min(impeded, unimpeded)
+            
+            # Compute shortest path with optimistic costs
+            heuristic_value = nx.shortest_path_length(
+                self.Graph, 
+                source=gv_pos, 
+                target=self.GV_goal[0],
+                weight=optimistic_cost
+            )
+            
+        except (nx.NetworkXNoPath, KeyError):
             # If no path exists, fall back to original heuristic
-            heuristic_value = self.heuristics[gv_pos]
+            heuristic_value = self.heuristics.get(gv_pos, float('inf'))
+        
+        # ✅ CRITICAL: Ensure heuristic is NEVER greater than true cost
+        # Compare with original heuristic and take the minimum to ensure admissibility
+        original_h = self.heuristics.get(gv_pos, float('inf'))
+        final_heuristic = min(heuristic_value, original_h)
         
         self.heuristic_computation_time += (time.time() - start_time)
-        return heuristic_value
+        return final_heuristic
 
     def compute_custom_topk(self, gv_pos, sv_pos, repaired_edges, k=None):
         """Top-k predictive heuristic (fast) - robust path reconstruction using nx.shortest_path."""
         start_time = time.time()
-        self.custom_heuristic_calls += 1
 
         if k is None:
             k = self.topk_k
@@ -178,7 +200,7 @@ class GPLAstar(labels):
 
 
     def heuristic(self, node, repaired_edges=None, sv_pos=None):
-        """Unified heuristic function that supports original, custom (full graph), and topk variants."""
+        """Unified heuristic function that supports original, topk, and custom variants."""
         if self.heuristic_type == 'custom':
             if repaired_edges is None:
                 self.original_heuristic_calls += 1
@@ -259,8 +281,6 @@ class GPLAstar(labels):
         print(f"Heuristic computation time: {self.heuristic_computation_time:.4f} seconds")
         if self.custom_heuristic_calls > 0:
             print(f"Average custom heuristic time: {self.heuristic_computation_time/self.custom_heuristic_calls:.6f} seconds per call")
-        else:
-            print(f"Average custom heuristic time: 0 seconds per call")
 
     def simulation(self, label):
         '''

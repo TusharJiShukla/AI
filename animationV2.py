@@ -103,6 +103,70 @@ class AnimateV2:
             txt = inst.artists['time_text']['artist'][0]
         txt.set_text(f't = {t:.1f}')
 
+    # ✅ ADDED MISSING _add METHOD
+    @classmethod
+    def _add(cls, artist_name, x, y, *args, figure_number=1, figure_name="", xlim=None, ylim=None, draw_clean=False, linestyle="", **kwargs):
+        """Add line2d artist and its data to a particular figure"""
+        # initialization event.canvas.figure.axes[0].has_been_closed = True
+        if not plt.fignum_exists(figure_number):
+            # Get figure
+            fig = plt.figure(figure_number)
+            # Add axes
+            ax = fig.add_subplot(1,1,1)
+            # set limits
+            if xlim is None or ylim is None:
+                xlim = (-15,15)
+                ylim = (-15,15)
+            ax.set_xlim(xlim[0], xlim[1])
+            ax.set_ylim(ylim[0], ylim[1])
+            # Draw the canvas once
+            plt.legend()    # must have already defined this
+            plt.show(block=False)    
+            plt.pause(0.1)
+
+            # Store the background in new class instance
+            o = AnimateV2(figure_number=1, figure_name=figure_name)
+            o.background = fig.canvas.copy_from_bbox(ax.bbox)
+            cls.instances[figure_number] = o
+
+        else: 
+            # Get figure
+            fig = plt.figure(figure_number)
+            ax = fig.axes[0]
+        
+        # Detect when figure is closed. then delete everything basically
+        cls.cid_closed_fig = fig.canvas.mpl_connect('close_event', cls.on_shutdown)
+
+        # Add artist if not yet
+        if artist_name not in cls.instances[figure_number].artists:
+            if not args:
+                if kwargs:
+                    cls.instances[figure_number]._add_artists(ax.plot(x, y, linestyle=linestyle,**kwargs), artist_name)
+                else:
+                    cls.instances[figure_number]._add_artists(ax.plot(x, y, linestyle=linestyle), artist_name)
+            else:
+                if kwargs:
+                    cls.instances[figure_number]._add_artists(ax.plot(x, y, args[0], linestyle=linestyle, **kwargs), artist_name)
+                else:
+                    cls.instances[figure_number]._add_artists(ax.plot(x, y, args[0], linestyle=linestyle), artist_name)
+
+        # store data
+        if not draw_clean:
+            if isinstance(x, float) or isinstance(x, int):
+                cls.instances[figure_number].artists[artist_name]['xdata'].append(x)
+                cls.instances[figure_number].artists[artist_name]['ydata'].append(y)
+            else:
+                cls.instances[figure_number].artists[artist_name]['xdata'].extend(x)
+                cls.instances[figure_number].artists[artist_name]['ydata'].extend(y)
+        else:
+            cls.instances[figure_number].artists[artist_name]['xdata'] = x
+            cls.instances[figure_number].artists[artist_name]['ydata'] = y
+
+        line = cls.instances[figure_number].artists[artist_name]['artist'][0]
+        # Set line2d data
+        line.set_xdata(cls.instances[figure_number].artists[artist_name]['xdata'])
+        line.set_ydata(cls.instances[figure_number].artists[artist_name]['ydata'])
+
     # -----------------------------------------------------------------
     #  (the rest of your original code – unchanged)
     # -----------------------------------------------------------------
@@ -137,10 +201,7 @@ class AnimateV2:
     def _draw_animated(self):
         """Draw all of the animated artists."""
         fig = self.canvas.figure
-        # for a in self.artists.values():
-        #     fig.draw_artist(a['artist'][0])
         sorted_artist = sorted(self.artists.values(), key=lambda x: x['artist'][0].get_zorder())
-        # for a in cls.instances[figure_number].artists.values():
         for a in sorted_artist:
             # Draw artists
             fig.draw_artist(a['artist'][0])
@@ -218,12 +279,6 @@ class AnimateV2:
         else:
             # restore background 
             fig.canvas.restore_region(cls.instances[figure_number].background)
-            # #Respect z order
-            # sorted_artist = sorted(cls.instances[figure_number].artists.values(), key=lambda x: x['artist'][0].get_zorder())
-            # # for a in cls.instances[figure_number].artists.values():
-            # for a in sorted_artist:
-            #     # Draw artists
-            #     fig.draw_artist(a['artist'][0])
             
             cls.instances[figure_number]._draw_animated()
             cls._update_flash(figure_number)  # <-- new flash fade
