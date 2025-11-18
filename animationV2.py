@@ -103,7 +103,7 @@ class AnimateV2:
             txt = inst.artists['time_text']['artist'][0]
         txt.set_text(f't = {t:.1f}')
 
-    # ✅ ADDED MISSING _add METHOD
+    #  ADDED MISSING _add METHOD
     @classmethod
     def _add(cls, artist_name, x, y, *args, figure_number=1, figure_name="", xlim=None, ylim=None, draw_clean=False, linestyle="", **kwargs):
         """Add line2d artist and its data to a particular figure"""

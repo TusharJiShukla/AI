@@ -77,7 +77,7 @@ class planner():
         print('Vehicle Trajectory (gv_pos, sv_pos, gv_time, sv_time)',GPLAsim_topk.Final_path)
         print('Run Time ', GPLAsim_time_topk,  'Cost ', GPLAsim_cost_topk)
         
-        # ✅ ADDED: Run with custom heuristic
+        #  ADDED: Run with custom heuristic
         print('\n' + '='*60)
         print('############ Starting GPLAstar with CUSTOM heuristic ############# ')
         print('='*60)
@@ -99,7 +99,7 @@ class planner():
         print('Vehicle Trajectory (gv_pos, sv_pos, gv_time, sv_time)',cen_algo.Final_path)
         print('Run Time ', cen_time,  'Cost ', cen_cost)
 
-        # ✅ UPDATED: Comparison Results with ALL algorithms including Centralized A*
+        #  UPDATED: Comparison Results with ALL algorithms including Centralized A*
         print('\n' + '='*140)
         print('####################### COMPREHENSIVE COMPARISON RESULTS #######################')
         print('='*140)
@@ -142,79 +142,79 @@ class planner():
         # Heuristic Calls (N/A for Centralized A*)
         print(f"{'Heuristic Calls':<25} {GPLAsim_original.original_heuristic_calls:<12} {GPLAsim_topk.original_heuristic_calls:<12} {GPLAsim_custom.original_heuristic_calls + GPLAsim_custom.custom_heuristic_calls:<12} {'N/A':<15} {'-'*12}")
 
-        # ✅ UPDATED: Determine overall best performer
+        #  UPDATED: Determine overall best performer
         print('\n' + '='*140)
-        print('🏆 OVERALL PERFORMANCE ANALYSIS')
+        print(' OVERALL PERFORMANCE ANALYSIS')
         print('='*140)
         
         # Cost performance (primary metric)
         if best_cost_algo == 'Custom':
-            print("🎉 CUSTOM HEURISTIC FOUND THE OPTIMAL SOLUTION!")
+            print(" CUSTOM HEURISTIC FOUND THE OPTIMAL SOLUTION!")
         elif best_cost_algo == 'Top-K':
-            print("🎉 TOP-K HEURISTIC FOUND THE OPTIMAL SOLUTION!") 
+            print(" TOP-K HEURISTIC FOUND THE OPTIMAL SOLUTION!") 
         elif best_cost_algo == 'Original':
-            print("🎉 ORIGINAL HEURISTIC FOUND THE OPTIMAL SOLUTION!")
+            print(" ORIGINAL HEURISTIC FOUND THE OPTIMAL SOLUTION!")
         else:
-            print("🎉 CENTRALIZED A* FOUND THE OPTIMAL SOLUTION!")
+            print(" CENTRALIZED A* FOUND THE OPTIMAL SOLUTION!")
         
         # Speed performance
         if best_time_algo == 'Custom':
-            print("🚀 CUSTOM HEURISTIC WAS THE FASTEST")
+            print(" CUSTOM HEURISTIC WAS THE FASTEST")
         elif best_time_algo == 'Top-K':
-            print("🚀 TOP-K HEURISTIC WAS THE FASTEST")
+            print(" TOP-K HEURISTIC WAS THE FASTEST")
         elif best_time_algo == 'Original':
-            print("🚀 ORIGINAL HEURISTIC WAS THE FASTEST")
+            print(" ORIGINAL HEURISTIC WAS THE FASTEST")
         else:
-            print("🚀 CENTRALIZED A* WAS THE FASTEST")
+            print(" CENTRALIZED A* WAS THE FASTEST")
             
         # Efficiency performance (labels expanded)
         if best_labels_algo == 'Custom':
-            print("💪 CUSTOM HEURISTIC WAS MOST EFFICIENT (fewest labels expanded)")
+            print(" CUSTOM HEURISTIC WAS MOST EFFICIENT (fewest labels expanded)")
         elif best_labels_algo == 'Top-K':
-            print("💪 TOP-K HEURISTIC WAS MOST EFFICIENT (fewest labels expanded)")
+            print(" TOP-K HEURISTIC WAS MOST EFFICIENT (fewest labels expanded)")
         elif best_labels_algo == 'Original':
-            print("💪 ORIGINAL HEURISTIC WAS MOST EFFICIENT (fewest labels expanded)")
+            print(" ORIGINAL HEURISTIC WAS MOST EFFICIENT (fewest labels expanded)")
         else:
-            print("💪 CENTRALIZED A* WAS MOST EFFICIENT (fewest labels expanded)")
+            print(" CENTRALIZED A* WAS MOST EFFICIENT (fewest labels expanded)")
 
         print('\n' + '='*140)
         
-        # 🎬 ANIMATION TRIGGER - UPDATED WITH CUSTOM HEURISTIC
+        #  ANIMATION TRIGGER - UPDATED WITH CUSTOM HEURISTIC
         self.run_animations(GPLAsim_original, GPLAsim_topk, GPLAsim_custom, cen_algo)
 
     def run_animations(self, GPLAsim_original, GPLAsim_topk, GPLAsim_custom, cen_algo):
         """Run animations for all algorithms"""
         print("\n" + "="*70)
-        print("🎬 STARTING ANIMATIONS")
+        print(" STARTING ANIMATIONS")
         print("="*70)
         
         # 1. ORIGINAL HEURISTIC ANIMATION
         if GPLAsim_original and GPLAsim_original.Final_path:
-            print("\n📹 Animating ORIGINAL HEURISTIC...")
+            print("\n Animating ORIGINAL HEURISTIC...")
             self.animate_algorithm_path(GPLAsim_original.Final_path, "Original Heuristic")
         else:
-            print("❌ No path found for Original Heuristic")
+            print(" No path found for Original Heuristic")
         
         # 2. TOP-K HEURISTIC ANIMATION
         if GPLAsim_topk and GPLAsim_topk.Final_path:
-            print("\n📹 Animating TOP-K HEURISTIC...")  
+            print("\n Animating TOP-K HEURISTIC...")  
             self.animate_algorithm_path(GPLAsim_topk.Final_path, "Top-K Heuristic")
         else:
-            print("❌ No path found for Top-K Heuristic")
+            print(" No path found for Top-K Heuristic")
             
-        # ✅ ADDED: CUSTOM HEURISTIC ANIMATION
+        # ADDED: CUSTOM HEURISTIC ANIMATION
         if GPLAsim_custom and GPLAsim_custom.Final_path:
-            print("\n📹 Animating CUSTOM HEURISTIC...")
+            print("\n Animating CUSTOM HEURISTIC...")
             self.animate_algorithm_path(GPLAsim_custom.Final_path, "Custom Heuristic")
         else:
-            print("❌ No path found for Custom Heuristic")
+            print(" No path found for Custom Heuristic")
             
         # 4. CENTRALIZED A* ANIMATION
         if cen_algo and cen_algo.Final_path:
-            print("\n📹 Animating CENTRALIZED A*...")
+            print("\n Animating CENTRALIZED A*...")
             self.animate_algorithm_path(cen_algo.Final_path, "Centralized A*")
         else:
-            print("❌ No path found for Centralized A*")
+            print(" No path found for Centralized A*")
 
     def animate_algorithm_path(self, path, algorithm_name):
         """Animate a single algorithm's path using existing animate_motion"""
@@ -229,15 +229,15 @@ class planner():
         self.initialize_plot()
         
         # Start animation
-        print("   🚀 Starting animation... (Close window to continue)")
+        print("  Starting animation... (Close window to continue)")
         self.animate_motion('perm_label')
         
-        print("   ✅ Animation completed\n")
+        print("  Animation completed\n")
 
     def initialize_plot(self):
         fig, ax = plt.subplots(figsize=(8, 8))
         
-        # ✅ SIMPLER APPROACH - Direct matplotlib plotting
+        # SIMPLER APPROACH - Direct matplotlib plotting
         # Create mapping from node number to coordinates
         node_to_coord = {}
         for node in self.Graph.nodes:
@@ -287,7 +287,7 @@ class planner():
         if algo != 'perm_label':
             return
             
-        print("   🎬 Running simplified animation...")
+        print("  Running simplified animation...")
         
         # Convert node numbers to coordinates
         node_to_coord = {}
@@ -358,8 +358,8 @@ class planner():
             
             plt.draw()
             plt.pause(0.5)  # Pause between steps
-        
-        print("   ✅ Animation completed")
+    
+        print(" Animation completed")
         plt.show(block=True)
 
 if __name__=='__main__':
